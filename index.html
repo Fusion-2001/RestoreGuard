@@ -1,0 +1,2152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RestoreGuard — Zero-Gap Backup for Every Managed Mac</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cabinet+Grotesk:wght@300;400;500;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #0B0E0F;
+  --bg2:     #111517;
+  --bg3:     #161B1D;
+  --border:  rgba(255,255,255,.07);
+  --border2: rgba(255,255,255,.12);
+  --ink:     #FFFFFF;
+  --muted:   #7A8A8E;
+  --muted2:  #4A5A5E;
+  --teal:    #00D4AA;
+  --teal2:   #00A882;
+  --teal3:   rgba(0,212,170,.1);
+  --teal4:   rgba(0,212,170,.06);
+  --orange:  #FF6B35;
+  --blue:    #3B9EFF;
+  --display: 'Bebas Neue', sans-serif;
+  --body:    'Cabinet Grotesk', sans-serif;
+  --mono:    'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--body);
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── NOISE OVERLAY ─────────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
+
+/* ── GRID BACKGROUND ───────────────────────────────────────────── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0,212,170,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,170,.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 80%);
+}
+
+/* ── UTILS ─────────────────────────────────────────────────────── */
+.container { max-width: 1120px; margin: 0 auto; padding: 0 40px; position: relative; z-index: 1; }
+
+.teal { color: var(--teal); }
+.mono { font-family: var(--mono); }
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 20px;
+}
+.label::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 1px;
+  background: var(--teal);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 13px 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  transition: all .2s;
+  text-decoration: none;
+  letter-spacing: .01em;
+}
+
+.btn-teal {
+  background: var(--teal);
+  color: #000;
+  box-shadow: 0 0 32px rgba(0,212,170,.3);
+}
+.btn-teal:hover {
+  background: #00F0C0;
+  box-shadow: 0 0 48px rgba(0,212,170,.5);
+  transform: translateY(-2px);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border2);
+}
+.btn-ghost:hover { color: var(--ink); border-color: rgba(255,255,255,.3); }
+
+/* ── REVEAL ────────────────────────────────────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity .65s ease, transform .65s ease;
+}
+.reveal.in { opacity: 1; transform: none; }
+
+/* ── NAV ───────────────────────────────────────────────────────── */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: rgba(11,14,15,.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 62px;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--body);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -.01em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* App icon — macOS-style rounded square with shield */
+.app-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #1E3A8A 0%, #1E40AF 40%, #2563EB 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.app-icon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(145deg, rgba(255,255,255,.18) 0%, transparent 50%);
+  border-radius: inherit;
+}
+.app-icon svg {
+  width: 20px;
+  height: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  list-style: none;
+}
+.nav-links a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color .15s;
+}
+.nav-links a:hover { color: var(--ink); }
+
+.nav-actions { display: flex; gap: 10px; align-items: center; }
+
+.nav-cta {
+  background: var(--teal);
+  color: #000;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: 5px;
+  text-decoration: none;
+  transition: all .2s;
+  box-shadow: 0 0 20px rgba(0,212,170,.25);
+}
+.nav-cta:hover { background: #00F0C0; transform: translateY(-1px); }
+
+/* ── HERO ──────────────────────────────────────────────────────── */
+#hero {
+  padding: 100px 0 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Radial glow behind content */
+.hero-glow {
+  position: absolute;
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, rgba(0,212,170,.12) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+}
+
+.hero-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(0,212,170,.4); }
+  50% { opacity: .7; transform: scale(.8); box-shadow: 0 0 0 6px rgba(0,212,170,0); }
+}
+
+.hero-h1 {
+  font-family: var(--display);
+  font-size: clamp(64px, 8vw, 100px);
+  line-height: .95;
+  letter-spacing: .01em;
+  color: var(--ink);
+  margin-bottom: 28px;
+}
+
+.hero-h1 .line-teal {
+  color: var(--teal);
+  display: block;
+}
+
+.hero-sub {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.75;
+  max-width: 440px;
+  margin-bottom: 36px;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 44px;
+}
+
+.hero-trust {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted2);
+}
+
+.hero-trust::before {
+  content: '—';
+  color: var(--teal);
+}
+
+/* ── HERO RIGHT: Big shield visual ─────────────────────────────── */
+.hero-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.shield-wrap {
+  position: relative;
+  width: 360px;
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Rotating rings */
+.ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid;
+  animation: spin linear infinite;
+}
+.ring-1 {
+  width: 320px; height: 320px;
+  border-color: rgba(0,212,170,.15);
+  animation-duration: 20s;
+}
+.ring-2 {
+  width: 260px; height: 260px;
+  border-color: rgba(0,212,170,.10);
+  animation-duration: 15s;
+  animation-direction: reverse;
+}
+.ring-3 {
+  width: 200px; height: 200px;
+  border-color: rgba(0,212,170,.07);
+  animation-duration: 25s;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Ring orbit dots */
+.ring-1::before, .ring-1::after,
+.ring-2::before, .ring-2::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--teal);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--teal);
+}
+.ring-1::before { top: -3px; left: 50%; transform: translateX(-50%); }
+.ring-1::after  { bottom: -3px; left: 50%; transform: translateX(-50%); }
+.ring-2::before { top: 50%; right: -3px; transform: translateY(-50%); }
+.ring-2::after  { top: 50%; left: -3px; transform: translateY(-50%); }
+
+/* Central icon */
+.shield-center {
+  position: relative;
+  z-index: 10;
+  width: 120px;
+  height: 120px;
+  border-radius: 28px;
+  background: linear-gradient(145deg, #1E3A8A 0%, #1E40AF 40%, #2563EB 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 0 60px rgba(0,212,170,.25),
+    0 0 120px rgba(0,212,170,.1),
+    0 24px 64px rgba(0,0,0,.5),
+    inset 0 2px 0 rgba(255,255,255,.18);
+  animation: float 5s ease-in-out infinite;
+}
+.shield-center::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(145deg, rgba(255,255,255,.2) 0%, transparent 50%);
+}
+.shield-center svg {
+  width: 64px;
+  height: 64px;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-12px); }
+}
+
+/* Status chips floating around shield */
+.shield-chip {
+  position: absolute;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  animation: float-chip ease-in-out infinite;
+}
+
+.shield-chip-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+}
+
+.chip-1 { top: 20px; right: -20px; animation-duration: 6s; animation-delay: 0s; }
+.chip-2 { bottom: 60px; right: -30px; animation-duration: 7s; animation-delay: 1s; }
+.chip-3 { bottom: 20px; left: -20px; animation-duration: 5.5s; animation-delay: .5s; }
+.chip-4 { top: 60px; left: -30px; animation-duration: 6.5s; animation-delay: 1.5s; }
+
+@keyframes float-chip {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+
+/* ── LOGOS ─────────────────────────────────────────────────────── */
+#logos {
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.logos-inner {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+  flex-wrap: wrap;
+}
+
+.logos-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border2);
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  transition: color .2s;
+}
+.logo-text:hover { color: var(--muted); }
+
+/* ── FEATURES ──────────────────────────────────────────────────── */
+#features { padding: 120px 0; }
+
+.section-h2 {
+  font-family: var(--display);
+  font-size: clamp(48px, 6vw, 80px);
+  line-height: .95;
+  letter-spacing: .01em;
+  margin-bottom: 16px;
+  color: var(--ink);
+}
+
+.section-sub {
+  font-size: 16px;
+  color: var(--muted);
+  line-height: 1.75;
+  max-width: 520px;
+}
+
+.features-header { margin-bottom: 64px; }
+
+/* Bento grid */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: auto;
+  gap: 12px;
+}
+
+.bento-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px 28px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .25s, transform .25s, box-shadow .25s;
+  cursor: default;
+}
+.bento-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(0,212,170,.04) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity .3s;
+}
+.bento-card:hover { border-color: rgba(0,212,170,.25); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+.bento-card:hover::before { opacity: 1; }
+
+/* Teal glow spot on hover */
+.bento-card::after {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 120px; height: 120px;
+  background: radial-gradient(circle, rgba(0,212,170,.12) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity .3s;
+}
+.bento-card:hover::after { opacity: 1; }
+
+.b-wide   { grid-column: span 3; }
+.b-full   { grid-column: span 6; }
+.b-narrow { grid-column: span 2; }
+
+.b-icon {
+  font-size: 28px;
+  margin-bottom: 18px;
+}
+
+.b-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--teal);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.b-title {
+  font-family: var(--body);
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 10px;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.b-desc {
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.b-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 16px;
+}
+
+.btag {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  background: rgba(0,212,170,.08);
+  color: var(--teal);
+  border-radius: 4px;
+  border: 1px solid rgba(0,212,170,.15);
+}
+
+/* Wide card has a horizontal accent bar */
+.b-wide .b-accent-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--teal), transparent);
+}
+
+/* ── HOW IT WORKS ──────────────────────────────────────────────── */
+#how {
+  padding: 120px 0;
+  position: relative;
+}
+
+.how-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(0,212,170,.03) 50%, transparent 100%);
+  pointer-events: none;
+}
+
+.how-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: start;
+}
+
+.steps-list { display: flex; flex-direction: column; }
+
+.step-item {
+  display: flex;
+  gap: 20px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: all .2s;
+}
+.step-item:last-child { border-bottom: none; }
+.step-item:hover .step-num { border-color: var(--teal); color: var(--teal); }
+.step-item.active .step-num { background: var(--teal); border-color: var(--teal); color: #000; }
+.step-item.active .step-title { color: var(--ink); }
+
+.step-num {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: all .2s;
+}
+
+.step-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 5px;
+  transition: color .2s;
+}
+
+.step-desc {
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.jamf-compat {
+  margin-top: 28px;
+  padding: 16px 20px;
+  background: rgba(0,212,170,.05);
+  border: 1px solid rgba(0,212,170,.15);
+  border-radius: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.compat-check {
+  color: var(--teal);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.compat-label {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.compat-tags {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* Code block */
+.code-block {
+  background: #0D1117;
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,.5);
+}
+
+.code-topbar {
+  background: rgba(255,255,255,.03);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.c-dot { width: 11px; height: 11px; border-radius: 50%; }
+.c-dot:nth-child(1) { background: #FF5F57; }
+.c-dot:nth-child(2) { background: #FEBC2E; }
+.c-dot:nth-child(3) { background: #28C840; }
+
+.c-file {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(255,255,255,.3);
+  margin-left: 10px;
+}
+
+.code-body {
+  padding: 22px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.9;
+}
+
+.cl   { display: flex; gap: 12px; }
+.c-p  { color: var(--teal); flex-shrink: 0; }
+.c-t  { color: rgba(255,255,255,.78); }
+.c-g  { color: #3DD68C; }
+.c-d  { color: rgba(255,255,255,.3); }
+.c-b  { color: #79B8FF; }
+
+.cursor {
+  display: inline-block;
+  width: 7px; height: 14px;
+  background: var(--teal);
+  animation: blink 1.1s step-end infinite;
+  vertical-align: text-bottom;
+}
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+
+/* ── STATS BANNER ──────────────────────────────────────────────── */
+#stats {
+  padding: 0 0 100px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.stat-cell {
+  padding: 40px 36px;
+  background: var(--bg2);
+  transition: background .2s;
+}
+.stat-cell:hover { background: var(--bg3); }
+
+.stat-big {
+  font-family: var(--display);
+  font-size: 64px;
+  line-height: 1;
+  color: var(--ink);
+  margin-bottom: 8px;
+  letter-spacing: .01em;
+}
+
+.stat-big span { color: var(--teal); }
+
+.stat-caption {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ── PRICING ───────────────────────────────────────────────────── */
+#pricing {
+  padding: 120px 0;
+  position: relative;
+}
+
+.pricing-glow {
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 600px; height: 400px;
+  background: radial-gradient(ellipse, rgba(0,212,170,.07) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.pricing-header { text-align: center; margin-bottom: 52px; }
+
+.billing-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  margin-top: 24px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  padding: 3px;
+}
+
+.b-opt {
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: all .15s;
+  user-select: none;
+}
+.b-opt.active {
+  background: var(--teal);
+  color: #000;
+  box-shadow: 0 0 16px rgba(0,212,170,.3);
+}
+
+.b-save {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--teal);
+  padding: 0 8px;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.plan-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: transform .25s, box-shadow .25s, border-color .25s;
+}
+.plan-card:hover { transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+.plan-card.featured { border-color: var(--teal); box-shadow: 0 0 40px rgba(0,212,170,.12); }
+.plan-card.featured:hover { box-shadow: 0 0 40px rgba(0,212,170,.2), 0 20px 60px rgba(0,0,0,.4); }
+
+.plan-top {
+  padding: 28px 28px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-featured-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #000;
+  background: var(--teal);
+  padding: 3px 10px;
+  border-radius: 3px;
+  margin-bottom: 14px;
+  display: inline-block;
+}
+
+.plan-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  margin-bottom: 12px;
+}
+
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.plan-price-n {
+  font-family: var(--display);
+  font-size: 52px;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.plan-price-p { font-size: 14px; color: var(--muted); }
+
+.plan-cap {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted2);
+  margin-bottom: 12px;
+}
+
+.plan-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+.plan-bottom { padding: 22px 28px 28px; }
+
+.plan-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 24px;
+}
+
+.pf {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13px;
+  color: rgba(255,255,255,.7);
+}
+
+.pf-check {
+  width: 16px; height: 16px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: rgba(0,212,170,.15);
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  margin-top: 2px;
+}
+
+.plan-btn-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 13px;
+  font-size: 14px;
+  font-family: var(--body);
+  border-radius: 8px;
+}
+
+.btn-plan-outline {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--border2);
+}
+.btn-plan-outline:hover { border-color: rgba(255,255,255,.35); }
+
+/* ── TESTIMONIALS ──────────────────────────────────────────────── */
+#testimonials { padding: 120px 0; border-top: 1px solid var(--border); }
+
+.quotes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 56px;
+}
+
+.q-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 30px;
+  transition: border-color .25s, transform .25s;
+}
+.q-card:hover { border-color: rgba(0,212,170,.2); transform: translateY(-3px); }
+
+.q-stars { color: var(--teal); font-size: 13px; margin-bottom: 16px; letter-spacing: 2px; }
+
+.q-text {
+  font-size: 14px;
+  font-style: italic;
+  color: rgba(255,255,255,.75);
+  line-height: 1.75;
+  margin-bottom: 22px;
+}
+
+.q-author { display: flex; align-items: center; gap: 12px; }
+
+.q-av {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--body); font-size: 13px; font-weight: 700;
+  color: #000; flex-shrink: 0;
+}
+
+.q-name { font-size: 13px; font-weight: 700; }
+.q-role { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+/* ── FAQ ───────────────────────────────────────────────────────── */
+#faq {
+  padding: 120px 0;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.faq-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 80px;
+  align-items: start;
+}
+
+.faq-list { display: flex; flex-direction: column; }
+
+.faq-item { border-bottom: 1px solid var(--border); }
+
+.faq-q {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  gap: 14px;
+  transition: color .15s;
+}
+.faq-q:hover { color: var(--teal); }
+
+.faq-icon {
+  width: 24px; height: 24px;
+  border: 1.5px solid var(--border2);
+  border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: var(--muted);
+  flex-shrink: 0;
+  transition: all .2s;
+}
+.faq-item.open .faq-icon {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #000;
+  transform: rotate(45deg);
+}
+
+.faq-a {
+  max-height: 0; overflow: hidden;
+  font-size: 14px; color: var(--muted); line-height: 1.8;
+  transition: max-height .35s ease, padding .25s;
+}
+.faq-item.open .faq-a { max-height: 200px; padding-bottom: 20px; }
+
+/* ── CTA ───────────────────────────────────────────────────────── */
+#cta { padding: 100px 0; }
+
+.cta-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 100px 64px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-box::before {
+  content: '';
+  position: absolute;
+  top: -100px; left: 50%; transform: translateX(-50%);
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(0,212,170,.12) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+/* Big decorative text behind */
+.cta-bg-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--display);
+  font-size: 280px;
+  color: rgba(0,212,170,.025);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  line-height: 1;
+}
+
+.cta-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.cta-h2 {
+  font-family: var(--display);
+  font-size: clamp(52px, 7vw, 86px);
+  line-height: .95;
+  color: var(--ink);
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.cta-sub {
+  font-size: 16px;
+  color: var(--muted);
+  margin-bottom: 40px;
+  position: relative;
+  font-weight: 400;
+}
+
+.cta-actions {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+/* ── FOOTER ────────────────────────────────────────────────────── */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 60px 0 32px;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 48px;
+  margin-bottom: 48px;
+}
+
+.footer-brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--body);
+  font-weight: 800;
+  font-size: 17px;
+  margin-bottom: 14px;
+  color: var(--ink);
+}
+
+.footer-brand p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+  max-width: 260px;
+}
+
+.footer-col h5 {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--muted2);
+  margin-bottom: 14px;
+}
+
+.footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.footer-col a { font-size: 13px; color: var(--muted); transition: color .15s; text-decoration: none; }
+.footer-col a:hover { color: var(--teal); }
+
+.footer-bottom {
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted2);
+}
+
+/* ── RESPONSIVE ────────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .nav-links { display: none; }
+  .hero-inner { grid-template-columns: 1fr; }
+  .hero-right { display: none; }
+  .bento { grid-template-columns: repeat(2, 1fr); }
+  .b-wide, .b-full, .b-narrow { grid-column: span 1; }
+  .how-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .pricing-grid { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; }
+  .quotes-grid { grid-template-columns: 1fr; }
+  .faq-layout { grid-template-columns: 1fr; gap: 40px; }
+  .footer-grid { grid-template-columns: 1fr 1fr; }
+  .container { padding: 0 24px; }
+  .cta-box { padding: 60px 28px; }
+}
+
+@media (max-width: 600px) {
+  .bento { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .footer-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="container">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">
+        <div class="app-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L4 5.5V11C4 15.55 7.41 19.74 12 21C16.59 19.74 20 15.55 20 11V5.5L12 2Z" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"/>
+            <path d="M9 12L11 14L15 10" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        RestoreGuard
+      </a>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="#" style="color:var(--muted)">Docs</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a href="#cta" class="nav-cta">Start free trial →</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-glow"></div>
+  <div class="container">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-eyebrow">
+          <span class="hero-eyebrow-dot"></span>
+          Built for Jamf Pro · v1.5.0 live
+        </div>
+        <h1 class="hero-h1">
+          ZERO-GAP<br>
+          BACKUP FOR<br>
+          <span class="line-teal">EVERY MAC.</span>
+        </h1>
+        <p class="hero-sub">
+          RestoreGuard enables backup and recovery for managed Mac fleets using your existing cloud storage or external drives — without breaking enrollment.
+        </p>
+        <div class="hero-actions">
+          <a href="#cta" class="btn btn-teal" style="font-size:15px;padding:15px 30px">Start 30-day free trial</a>
+          <a href="#how" class="btn btn-ghost">See how it works →</a>
+        </div>
+        <div class="hero-trust">No credit card required · Deploy in under 30 minutes</div>
+      </div>
+
+      <div class="hero-right">
+        <div class="shield-wrap">
+          <div class="ring ring-1"></div>
+          <div class="ring ring-2"></div>
+          <div class="ring ring-3"></div>
+
+          <div class="shield-center">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L4 5.5V11C4 15.55 7.41 19.74 12 21C16.59 19.74 20 15.55 20 11V5.5L12 2Z" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
+              <path d="M9 12L11 14L15 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+
+          <div class="shield-chip chip-1">
+            <span class="shield-chip-dot" style="background:#00D4AA;box-shadow:0 0 6px #00D4AA"></span>
+            <span style="color:#00D4AA">247</span>&nbsp;devices backed up
+          </div>
+          <div class="shield-chip chip-2">
+            <span class="shield-chip-dot" style="background:#3B9EFF"></span>
+            <span>Fast restores</span>
+          </div>
+          <div class="shield-chip chip-3">
+            <span class="shield-chip-dot" style="background:#FF6B35"></span>
+            <span style="color:#FF6B35">3 alerts</span>&nbsp;· action needed
+          </div>
+          <div class="shield-chip chip-4">
+            <span class="shield-chip-dot" style="background:#00D4AA;box-shadow:0 0 6px #00D4AA"></span>
+            <span>96% compliance</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<section id="logos">
+  <div class="container">
+    <div class="logos-inner">
+      <span class="mono" style="font-size:10px;color:var(--muted2);letter-spacing:.1em;text-transform:uppercase">Trusted at</span>
+      <div class="logos-sep"></div>
+      <span class="logo-text">Accenture</span>
+      <span class="logo-text">Deloitte</span>
+      <span class="logo-text">Sophos</span>
+      <span class="logo-text">Veeva</span>
+      <span class="logo-text">Citrix</span>
+      <span class="logo-text">Canonical</span>
+      <span class="logo-text">AECOM</span>
+    </div>
+  </div>
+</section>
+
+<!-- DATA SOVEREIGNTY BANNER -->
+<section id="sovereignty" style="padding:20px 0;background:rgba(0,212,170,.04);border-top:1px solid rgba(0,212,170,.12);border-bottom:1px solid rgba(0,212,170,.12)">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:center;gap:40px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--teal)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5.5V11C4 15.55 7.41 19.74 12 21C16.59 19.74 20 15.55 20 11V5.5L12 2Z" stroke="currentColor" stroke-width="2"/><path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        YOUR DATA NEVER TOUCHES OUR SERVERS
+      </div>
+      <div style="width:1px;height:20px;background:rgba(0,212,170,.2)"></div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--muted)">
+        BACKUPS LIVE IN <span style="color:var(--teal)">YOUR INFRASTRUCTURE</span>
+      </div>
+      <div style="width:1px;height:20px;background:rgba(0,212,170,.2)"></div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--muted)">
+        EXTERNAL DRIVES · S3 · AZURE · GCS
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="features-header reveal">
+      <div class="label">Everything you need</div>
+      <h2 class="section-h2">DESIGNED FOR<br>ADMINS WHO<br><span class="teal">MOVE FAST.</span></h2>
+      <p class="section-sub" style="margin-top:16px">Every feature is built around real Jamf workflows — silent deployment, PPPC profiles, webhooks, and zero user interaction required.</p>
+    </div>
+
+    <div class="bento reveal">
+      <div class="bento-card b-wide">
+        <div class="b-accent-bar"></div>
+        <div class="b-num">01</div>
+        <div class="b-icon">📦</div>
+        <div class="b-title">Jamf-native PKG deployment</div>
+        <div class="b-desc">One build script, one PKG. Drop it in a Jamf policy and every enrolled Mac gets the agent, daemon, and menu bar app — silently, at enrollment. No custom scripting required.</div>
+        <div class="b-tags"><span class="btag">Jamf Pro</span><span class="btag">Smart Groups</span><span class="btag">Webhooks</span><span class="btag">Silent install</span></div>
+      </div>
+      <div class="bento-card b-wide">
+        <div class="b-accent-bar"></div>
+        <div class="b-num">02</div>
+        <div class="b-icon">⚡</div>
+        <div class="b-title">Real-time fleet status</div>
+        <div class="b-desc">After every backup the agent force-checks in within 2 seconds. No 30-minute polling lag. The portal reflects exactly what just happened on the device, immediately.</div>
+        <div class="b-tags"><span class="btag">Force checkin</span><span class="btag">&lt;2s update</span><span class="btag">Live fleet view</span></div>
+      </div>
+      <div class="bento-card b-narrow">
+        <div class="b-num">03</div>
+        <div class="b-icon">↩</div>
+        <div class="b-title">Selective restore + merge</div>
+        <div class="b-desc">Restore individual folders or the whole device. Merge mode adds backup files alongside existing ones — nothing deleted.</div>
+        <div class="b-tags"><span class="btag">Merge mode</span><span class="btag">Per-folder</span></div>
+      </div>
+      <div class="bento-card b-narrow">
+        <div class="b-num">04</div>
+        <div class="b-icon">🔍</div>
+        <div class="b-title">Backup verification</div>
+        <div class="b-desc">Probe-reads 50 random files per snapshot. Proves to auditors that backups are readable — not just present on disk.</div>
+        <div class="b-tags"><span class="btag">Audit-ready</span><span class="btag">Auto-verify</span></div>
+      </div>
+      <div class="bento-card b-narrow">
+        <div class="b-num">05</div>
+        <div class="b-icon">📋</div>
+        <div class="b-title">Full audit trail</div>
+        <div class="b-desc">Every admin action logged with timestamp and operator. Add manual notes. One-click CSV export for compliance reviews.</div>
+        <div class="b-tags"><span class="btag">CSV export</span><span class="btag">Notes</span></div>
+      </div>
+      <div class="bento-card b-narrow">
+        <div class="b-num">06</div>
+        <div class="b-icon">🔗</div>
+        <div class="b-title">Jamf EA sync</div>
+        <div class="b-desc">Backup health and last backup date sync back to Jamf as Extension Attributes, enabling Smart Group targeting.</div>
+        <div class="b-tags"><span class="btag">EA sync</span><span class="btag">Auto-register</span></div>
+      </div>
+      <div class="bento-card b-wide">
+        <div class="b-accent-bar"></div>
+        <div class="b-num">07</div>
+        <div class="b-icon">🙋</div>
+        <div class="b-title">User-initiated backups</div>
+        <div class="b-desc">Users can trigger an on-demand backup any time directly from the RestoreGuard menu bar app — without waiting for the scheduled window. Ideal before software updates, before a trip, or anytime something important changes. All user-initiated backups are visible in the admin portal with full audit trail.</div>
+        <div class="b-tags"><span class="btag">On-demand backup</span><span class="btag">Menu bar app</span><span class="btag">Audit logged</span><span class="btag">No admin action needed</span></div>
+      </div>
+      <div class="bento-card b-wide">
+        <div class="b-accent-bar"></div>
+        <div class="b-num">08</div>
+        <div class="b-icon">☁️</div>
+        <div class="b-title">Your cloud, your data</div>
+        <div class="b-desc">Back up to your own Amazon S3 bucket, Azure Blob Storage, or Google Cloud Storage — RestoreGuard orchestrates the transfer, you own the destination. No vendor lock-in, no surprise egress bills, no third-party access to your backup data. Hybrid mode lets you run cloud and external drive backups side by side.</div>
+        <div class="b-tags"><span class="btag">Amazon S3</span><span class="btag">Azure Blob</span><span class="btag">Google Cloud</span><span class="btag">Hybrid mode</span><span class="btag">Your credentials</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="how-bg"></div>
+  <div class="container">
+    <div class="how-grid">
+      <div class="reveal">
+        <div class="label">How it works</div>
+        <h2 class="section-h2">UP AND<br>RUNNING IN<br><span class="teal">30 MINUTES.</span></h2>
+        <p class="section-sub" style="margin:16px 0 32px">Standard Jamf workflow. No custom scripting, no cloud storage fees, no MDM re-enrollment.</p>
+
+        <div class="steps-list">
+          <div class="step-item active" data-step="1" onclick="setStep(1)">
+            <div class="step-num">01</div>
+            <div>
+              <div class="step-title">Deploy the PPPC profile via Jamf</div>
+              <div class="step-desc">Upload the provided mobileconfig. Grants Full Disk Access silently — no user prompts, ever.</div>
+            </div>
+          </div>
+          <div class="step-item" data-step="2" onclick="setStep(2)">
+            <div class="step-num">02</div>
+            <div>
+              <div class="step-title">Build and upload the PKG</div>
+              <div class="step-desc">Run one build script with your server URL and API key. Upload the PKG to a Jamf policy.</div>
+            </div>
+          </div>
+          <div class="step-item" data-step="3" onclick="setStep(3)">
+            <div class="step-num">03</div>
+            <div>
+              <div class="step-title">Devices self-register on enrollment</div>
+              <div class="step-desc">Webhook triggers device registration the moment a Mac enrolls. No manual steps required.</div>
+            </div>
+          </div>
+          <div class="step-item" data-step="4" onclick="setStep(4)">
+            <div class="step-num">04</div>
+            <div>
+              <div class="step-title">Monitor and restore from the portal</div>
+              <div class="step-desc">View fleet compliance, push restores, and run verification checks — from anywhere.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="jamf-compat">
+          <span class="compat-check">✓</span>
+          <div>
+            <div class="compat-label">Jamf Pro compatible</div>
+            <div class="compat-tags">Jamf Pro 10.45+ · Smart Groups · Extension Attributes<br>Webhooks · ComputerEnrolled event · PPPC profiles</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal" style="transition-delay:.15s">
+        <div class="code-block">
+          <div class="code-topbar">
+            <div class="c-dot"></div><div class="c-dot"></div><div class="c-dot"></div>
+            <span class="c-file">build-test-pkg.sh</span>
+          </div>
+          <div class="code-body">
+            <div class="cl"><span class="c-p">$</span><span class="c-t">bash jsr-pkg/build-test-pkg.sh \</span></div>
+            <div class="cl"><span class="c-p"> </span><span class="c-t">&nbsp;&nbsp;https://restore.corp.com <span class="c-b">jsr-abc123</span></span></div>
+            <div style="height:10px"></div>
+            <div class="cl"><span class="c-g">✓ Agent binary:         876K</span></div>
+            <div class="cl"><span class="c-g">✓ Menu bar binary:     2.3M</span></div>
+            <div class="cl"><span class="c-g">✓ Backup agent:         512K</span></div>
+            <div class="cl"><span class="c-g">✓ Ad-hoc signed</span></div>
+            <div class="cl"><span class="c-g">✓ RestoreGuard-1.5.0.pkg</span></div>
+            <div style="height:10px"></div>
+            <div class="cl"><span class="c-d"># Upload to Jamf → scope to All Managed</span></div>
+            <div class="cl"><span class="c-d"># All enrolled Macs get it automatically.</span></div>
+            <div style="height:6px"></div>
+            <div class="cl"><span class="c-p">$</span><span class="cursor"></span></div>
+          </div>
+        </div>
+        <div style="margin-top:14px;padding:14px 18px;background:rgba(0,212,170,.05);border:1px solid rgba(0,212,170,.15);border-radius:10px;font-size:13px;color:var(--muted);line-height:1.6">
+          <span style="color:var(--teal);font-weight:700">Your infrastructure, your data.</span> Back up to your own cloud storage or to encrypted drives attached to each Mac. Our server stores metadata only.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLOUD SECTION -->
+<section id="cloud" style="padding:100px 0;border-top:1px solid var(--border)">
+  <div class="container">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center" class="reveal">
+      <div>
+        <div class="label">Backup destinations</div>
+        <h2 class="section-h2">YOUR CLOUD.<br>YOUR DRIVES.<br><span class="teal">YOUR RULES.</span></h2>
+        <p class="section-sub" style="margin-top:16px">
+          RestoreGuard never stores your backup data. We orchestrate — you own. Connect your existing cloud credentials once and every Mac backs up directly to your infrastructure. Nothing flows through our servers.
+        </p>
+        <div style="margin-top:28px;padding:18px 20px;background:rgba(0,212,170,.05);border:1px solid rgba(0,212,170,.15);border-radius:10px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--teal);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Our promise</div>
+          <div style="font-size:15px;font-weight:700;line-height:1.5;color:var(--ink)">"Your backups stay in YOUR infrastructure. We never store your data."</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px 24px;display:flex;align-items:flex-start;gap:18px;transition:border-color .25s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="font-size:28px;flex-shrink:0;line-height:1">🟠</div>
+          <div>
+            <div style="font-weight:800;font-size:15px;margin-bottom:5px">Amazon S3</div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.6">Back up directly to any S3 bucket in your AWS account. Use existing IAM roles — RestoreGuard never sees your AWS credentials in plaintext.</div>
+            <div style="margin-top:10px;display:flex;gap:5px;flex-wrap:wrap">
+              <span class="btag">S3-compatible</span><span class="btag">IAM roles</span><span class="btag">Versioning</span>
+            </div>
+          </div>
+        </div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px 24px;display:flex;align-items:flex-start;gap:18px;transition:border-color .25s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="font-size:28px;flex-shrink:0;line-height:1">🔵</div>
+          <div>
+            <div style="font-weight:800;font-size:15px;margin-bottom:5px">Azure Blob Storage</div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.6">Connect to any Azure Blob container using a Managed Identity or SAS token. Works with Azure Government and private endpoints.</div>
+            <div style="margin-top:10px;display:flex;gap:5px;flex-wrap:wrap">
+              <span class="btag">Managed Identity</span><span class="btag">SAS tokens</span><span class="btag">Gov cloud</span>
+            </div>
+          </div>
+        </div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px 24px;display:flex;align-items:flex-start;gap:18px;transition:border-color .25s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="font-size:28px;flex-shrink:0;line-height:1">🟡</div>
+          <div>
+            <div style="font-weight:800;font-size:15px;margin-bottom:5px">Google Cloud Storage</div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.6">Use a GCS bucket in any project. Authenticate via service account JSON or Workload Identity Federation — your choice.</div>
+            <div style="margin-top:10px;display:flex;gap:5px;flex-wrap:wrap">
+              <span class="btag">Service accounts</span><span class="btag">Workload Identity</span>
+            </div>
+          </div>
+        </div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px 24px;display:flex;align-items:flex-start;gap:18px;transition:border-color .25s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="font-size:28px;flex-shrink:0;line-height:1">💾</div>
+          <div>
+            <div style="font-weight:800;font-size:15px;margin-bottom:5px">External Drives</div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.6">Encrypted APFS or HFS+ drives connected to each Mac. Time Machine-style hardlink snapshots — no cloud account required. Hybrid mode runs both simultaneously.</div>
+            <div style="margin-top:10px;display:flex;gap:5px;flex-wrap:wrap">
+              <span class="btag">APFS encrypted</span><span class="btag">Hardlink snapshots</span><span class="btag">Offline capable</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section id="stats">
+  <div class="container">
+    <div class="stats-grid reveal">
+      <div class="stat-cell">
+        <div class="stat-big">96<span>%</span></div>
+        <div class="stat-caption">Average fleet backup compliance rate across deployments</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-big">&lt;30<span>s</span></div>
+        <div class="stat-caption">Time from backup complete to portal showing the result</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-big">5–15<span>s</span></div>
+        <div class="stat-caption">Backup integrity verification time per device</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-big">30<span>min</span></div>
+        <div class="stat-caption">Average fleet-wide deployment time via Jamf</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" style="padding:120px 0;position:relative">
+  <div class="pricing-glow"></div>
+  <div class="container">
+    <div class="pricing-header reveal">
+      <div class="label">Pricing</div>
+      <h2 class="section-h2" style="margin-top:10px">PRICED PER<br>DEVICE. SIMPLY.</h2>
+      <p class="section-sub" style="margin:14px auto 0;max-width:480px">Pay only for what you need. Start with monitoring and local backup, add cloud orchestration when you're ready, upgrade to enterprise continuity for compliance-critical fleets.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px" class="reveal">
+
+      <!-- Tier 1 -->
+      <div class="plan-card" style="border-top:3px solid #22C87A">
+        <div class="plan-top">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+            <span style="font-size:14px">🟢</span>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#22C87A">Tier 1</span>
+          </div>
+          <div style="font-family:var(--body);font-size:16px;font-weight:800;margin-bottom:12px;line-height:1.2">Monitoring &<br>Local Backup</div>
+          <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px">
+            <span style="font-family:var(--display);font-size:52px;color:var(--ink);line-height:1">$2</span>
+            <span style="font-size:16px;color:#22C87A;font-weight:700">–$3</span>
+            <span style="font-size:13px;color:var(--muted)">/device/mo</span>
+          </div>
+          <p style="font-size:13px;color:var(--muted);line-height:1.6">Everything you need to protect a Jamf-managed fleet with local external drive backup and full compliance visibility.</p>
+        </div>
+        <div class="plan-bottom">
+          <ul class="plan-features">
+            <li class="pf"><div class="pf-check" style="background:rgba(34,200,122,.15);color:#22C87A">✓</div> Incremental backups</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(34,200,122,.15);color:#22C87A">✓</div> External drive backup</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(34,200,122,.15);color:#22C87A">✓</div> Backup health monitoring</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(34,200,122,.15);color:#22C87A">✓</div> Jamf reporting & EA sync</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(34,200,122,.15);color:#22C87A">✓</div> Restore validation</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(34,200,122,.15);color:#22C87A">✓</div> Backup compliance tracking</li>
+          </ul>
+          <a href="#cta" class="btn plan-btn" style="background:transparent;border:1.5px solid #22C87A;color:#22C87A;width:100%;justify-content:center;padding:13px;border-radius:8px;font-size:14px;font-family:var(--body)">Start free trial</a>
+        </div>
+      </div>
+
+      <!-- Tier 2 -->
+      <div class="plan-card" style="border:1px solid var(--teal);box-shadow:0 0 40px rgba(0,212,170,.12);border-top:3px solid var(--teal)">
+        <div class="plan-top">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:14px">🟡</span>
+              <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal)">Tier 2</span>
+            </div>
+            <span style="font-family:var(--mono);font-size:10px;color:#000;background:var(--teal);padding:3px 10px;border-radius:3px;font-weight:500;letter-spacing:.08em;text-transform:uppercase">Most popular</span>
+          </div>
+          <div style="font-family:var(--body);font-size:16px;font-weight:800;margin-bottom:12px;line-height:1.2">Cloud<br>Orchestration</div>
+          <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px">
+            <span style="font-family:var(--display);font-size:52px;color:var(--ink);line-height:1">$4</span>
+            <span style="font-size:16px;color:var(--teal);font-weight:700">–$6</span>
+            <span style="font-size:13px;color:var(--muted)">/device/mo</span>
+          </div>
+          <p style="font-size:13px;color:var(--muted);line-height:1.6">Add your own cloud storage destination — S3, Azure, or GCS. Run cloud and local backup side by side with full restore workflows.</p>
+        </div>
+        <div class="plan-bottom">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Everything in Tier 1, plus:</div>
+          <ul class="plan-features">
+            <li class="pf"><div class="pf-check">✓</div> Customer-owned cloud storage (S3, Azure, GCS)</li>
+            <li class="pf"><div class="pf-check">✓</div> Cloud restore workflows</li>
+            <li class="pf"><div class="pf-check">✓</div> Hybrid backup (cloud + external drive)</li>
+            <li class="pf"><div class="pf-check">✓</div> Selective folder restore</li>
+            <li class="pf"><div class="pf-check">✓</div> Merge restore mode</li>
+            <li class="pf"><div class="pf-check">✓</div> SSO (Okta, Entra ID, Google)</li>
+          </ul>
+          <a href="#cta" class="btn btn-teal plan-btn" style="width:100%;justify-content:center;padding:13px;font-size:14px;font-family:var(--body);border-radius:8px">Start free trial</a>
+        </div>
+      </div>
+
+      <!-- Tier 3 -->
+      <div class="plan-card" style="border-top:3px solid #FF6B35">
+        <div class="plan-top">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+            <span style="font-size:14px">🔴</span>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#FF6B35">Tier 3</span>
+          </div>
+          <div style="font-family:var(--body);font-size:16px;font-weight:800;margin-bottom:12px;line-height:1.2">Enterprise<br>Continuity Platform</div>
+          <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px">
+            <span style="font-family:var(--display);font-size:52px;color:var(--ink);line-height:1">$7</span>
+            <span style="font-size:16px;color:#FF6B35;font-weight:700">–$10</span>
+            <span style="font-size:13px;color:var(--muted)">/device/mo</span>
+          </div>
+          <p style="font-size:13px;color:var(--muted);line-height:1.6">Built for large enterprises and MSPs managing multiple organizations with compliance, analytics, and cross-device migration workflows.</p>
+        </div>
+        <div class="plan-bottom">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Everything in Tier 2, plus:</div>
+          <ul class="plan-features">
+            <li class="pf"><div class="pf-check" style="background:rgba(255,107,53,.12);color:#FF6B35">✓</div> Multi-tenant MSP support</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(255,107,53,.12);color:#FF6B35">✓</div> Compliance dashboards</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(255,107,53,.12);color:#FF6B35">✓</div> Advanced analytics</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(255,107,53,.12);color:#FF6B35">✓</div> Cross-device migration</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(255,107,53,.12);color:#FF6B35">✓</div> Custom retention policies</li>
+            <li class="pf"><div class="pf-check" style="background:rgba(255,107,53,.12);color:#FF6B35">✓</div> Dedicated onboarding engineer</li>
+          </ul>
+          <a href="#cta" class="btn plan-btn" style="background:transparent;border:1.5px solid #FF6B35;color:#FF6B35;width:100%;justify-content:center;padding:13px;border-radius:8px;font-size:14px;font-family:var(--body)">Talk to sales</a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Per-device callout -->
+    <div class="reveal" style="margin-top:28px;padding:20px 28px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="font-size:22px">💡</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;margin-bottom:3px">Estimating your cost?</div>
+          <div style="font-size:13px;color:var(--muted)">A 150-device fleet on Tier 2 runs <span style="color:var(--teal);font-weight:600">$600–$900/month</span> — less than one hour of IT remediation after a data loss incident.</div>
+        </div>
+      </div>
+      <a href="#cta" class="btn btn-ghost" style="white-space:nowrap;flex-shrink:0">Get a custom quote →</a>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section id="testimonials">
+  <div class="container">
+    <div class="reveal">
+      <div class="label">Customer stories</div>
+      <h2 class="section-h2">JAMF ADMINS<br><span class="teal">LOVE IT.</span></h2>
+    </div>
+    <div class="quotes-grid reveal">
+      <div class="q-card">
+        <div class="q-stars">★★★★★</div>
+        <p class="q-text">"We went from zero backup compliance to 94% in one week. The Jamf integration is exactly what we'd been waiting for — no custom scripting, no edge cases."</p>
+        <div class="q-author">
+          <div class="q-av" style="background:var(--teal)">KL</div>
+          <div>
+            <div class="q-name">Kieran Lowe</div>
+            <div class="q-role">IT Manager · 380-device fleet</div>
+          </div>
+        </div>
+      </div>
+      <div class="q-card">
+        <div class="q-stars">★★★★★</div>
+        <p class="q-text">"After a ransomware incident, we restored 40 Macs in a single day using RestoreGuard's selective restore. Without it, we'd have been rebuilding from zero."</p>
+        <div class="q-author">
+          <div class="q-av" style="background:#22C87A">NP</div>
+          <div>
+            <div class="q-name">Nadia Petrova</div>
+            <div class="q-role">Head of IT Ops · Financial services</div>
+          </div>
+        </div>
+      </div>
+      <div class="q-card">
+        <div class="q-stars">★★★★★</div>
+        <p class="q-text">"The backup verification feature alone is worth the subscription. I can prove to auditors that our backups are readable — not just that the files exist on disk."</p>
+        <div class="q-author">
+          <div class="q-av" style="background:var(--orange)">DM</div>
+          <div>
+            <div class="q-name">Daniel Marsh</div>
+            <div class="q-role">Senior SysAdmin · Healthcare org</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="container">
+    <div class="faq-layout">
+      <div class="reveal">
+        <div class="label">FAQ</div>
+        <h2 class="section-h2" style="font-size:clamp(40px,5vw,64px)">COMMON<br>QUESTIONS.</h2>
+        <p style="font-size:14px;color:var(--muted);margin-top:14px;line-height:1.7">
+          Anything else?<br>
+          <a href="mailto:hello@restoreguard.io" style="color:var(--teal);font-weight:600">hello@restoreguard.io</a>
+        </p>
+      </div>
+      <div class="faq-list reveal">
+        <div class="faq-item open">
+          <div class="faq-q" onclick="toggleFaq(this)">Do I need a Jamf Pro instance to use RestoreGuard?<div class="faq-icon">+</div></div>
+          <div class="faq-a">RestoreGuard is designed around Jamf Pro but works independently. Jamf integration unlocks Smart Group targeting, EA sync, and webhook-based auto-enrolment — but the core backup and restore functionality operates without it.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">Where is backup data stored?<div class="faq-icon">+</div></div>
+          <div class="faq-a">Backup data lives entirely in <strong>your infrastructure</strong> — we never store it. You choose the destination: encrypted APFS or HFS+ external drives attached to each Mac, your own Amazon S3 bucket, an Azure Blob Storage container, or a Google Cloud Storage bucket. All cloud destinations use your credentials and your account — RestoreGuard orchestrates the transfer but has no access to the stored data. The RestoreGuard server stores metadata only: device health, backup history, and snapshot indexes.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">What macOS versions are supported?<div class="faq-icon">+</div></div>
+          <div class="faq-a">The RestoreGuard agent requires macOS 13 Ventura or later, and runs natively on both Intel and Apple Silicon. The server runs on any Node.js 18+ environment.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">How does the PPPC profile work?<div class="faq-icon">+</div></div>
+          <div class="faq-a">We provide a pre-built mobileconfig that grants Full Disk Access via bundleID. No code-signing certificate required for the profile. The PPPC profile must be deployed before the PKG to prevent macOS from caching a denied TCC state.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">Is RestoreGuard self-hosted or cloud-hosted?<div class="faq-icon">+</div></div>
+          <div class="faq-a">RestoreGuard is currently cloud-hosted only — the management server is fully managed by us, so there's nothing to deploy or maintain on your end. Self-hosted options are on the roadmap for a future release. Note that this refers only to the RestoreGuard management server; your actual backup data always lives in your own infrastructure (external drives or your cloud storage account) and never passes through our servers.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="container">
+    <div class="cta-box reveal">
+      <div class="cta-bg-text">RESTORE</div>
+      <div class="cta-eyebrow">30-day free trial · No credit card required</div>
+      <h2 class="cta-h2">YOUR FLEET<br>DESERVES<br><span class="teal">BETTER.</span></h2>
+      <p class="cta-sub">Deploy in 30 minutes. Full-featured from day one.</p>
+      <div class="cta-actions">
+        <a href="#" class="btn btn-teal" style="font-size:15px;padding:15px 32px">Start free trial →</a>
+        <a href="#" class="btn btn-ghost" style="font-size:15px;padding:15px 24px">Book a demo</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<!-- ═══════════════════════════════════════════════════════════
+     FOOTER CONTENT PAGES
+     Each section has an id matching its footer link anchor.
+     ═══════════════════════════════════════════════════════════ -->
+
+<!-- CHANGELOG -->
+<section id="changelog" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container">
+    <div class="label">Product</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">CHANGELOG</h2>
+    <p class="section-sub" style="margin:14px 0 40px">Recent releases and improvements to RestoreGuard.</p>
+    <div style="display:flex;flex-direction:column;gap:0;max-width:700px">
+      <div style="display:flex;gap:28px;padding:28px 0;border-bottom:1px solid var(--border)">
+        <div style="flex-shrink:0;width:80px;text-align:right">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--teal);background:rgba(0,212,170,.1);border:1px solid rgba(0,212,170,.2);padding:3px 8px;border-radius:3px">v1.5.0</span>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:6px">Slide-over folder picker · Cloud backup destinations · Per-device pricing</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.7">Redesigned Restore tab in the menu bar app with a full-screen slide-over folder picker. Added Amazon S3, Azure Blob, and Google Cloud Storage as backup destinations. Migrated pricing to per-device tiers. Merge restore mode now restricts eligible folders to home directories only.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:28px;padding:28px 0;border-bottom:1px solid var(--border)">
+        <div style="flex-shrink:0;width:80px;text-align:right">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--border);padding:3px 8px;border-radius:3px">v1.4.1</span>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:6px">Merge restore mode · Idempotent backup reports · Retry on server downtime</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.7">Introduced merge restore — adds backup files alongside existing files without deleting anything. Fixed duplicate backup and restore records when server is unreachable during a backup. Backup result files are now only deleted after a confirmed server report.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:28px;padding:28px 0">
+        <div style="flex-shrink:0;width:80px;text-align:right">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--border);padding:3px 8px;border-radius:3px">v1.4.0</span>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:6px">Backup verification · Audit log · CSV export · Restore history from drive</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.7">Added probe-read verification engine, audit log with manual notes, one-click CSV fleet export, and restore history that survives device reinstall by reading from the external drive.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOCUMENTATION -->
+<section id="documentation" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container">
+    <div class="label">Product</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">DOCUMENTATION</h2>
+    <p class="section-sub" style="margin:14px 0 40px">Everything you need to deploy and operate RestoreGuard.</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:900px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:22px;margin-bottom:12px">🚀</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px">Quick Start</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">Deploy RestoreGuard to a Jamf-managed fleet in under 30 minutes. Covers PPPC profile, PKG build, and first check-in.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:22px;margin-bottom:12px">☁️</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px">Cloud Backup Setup</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">Connect Amazon S3, Azure Blob, or Google Cloud Storage. Configure IAM roles, SAS tokens, and service accounts.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:22px;margin-bottom:12px">↩</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px">Restore Workflows</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">Full, selective, and merge restores from the admin portal or the user menu bar app. Covers all restore types.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:22px;margin-bottom:12px">📋</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px">Audit & Compliance</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">Audit log, manual notes, CSV export, backup verification, and compliance dashboards explained.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:22px;margin-bottom:12px">🔗</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px">Jamf Integration</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">Smart Groups, Extension Attributes, webhook setup, PPPC profiles, and policy scoping for Jamf Pro 10.45+.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:22px;margin-bottom:12px">🖥</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px">Cloud Server Setup</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">Deploy the management server on AWS, Azure, DigitalOcean, or any Linux VPS. Nginx, PM2, and Let's Encrypt included.</div>
+      </div>
+    </div>
+    <div style="margin-top:28px;padding:18px 22px;background:rgba(0,212,170,.05);border:1px solid rgba(0,212,170,.15);border-radius:10px;font-size:13px;color:var(--muted);max-width:900px">
+      Full documentation is in active development. For early access or specific integration guides, email <a href="mailto:docs@restoreguard.io" style="color:var(--teal)">docs@restoreguard.io</a>
+    </div>
+  </div>
+</section>
+
+<!-- STATUS -->
+<section id="status" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container">
+    <div class="label">Product</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">STATUS</h2>
+    <p class="section-sub" style="margin:14px 0 36px">Current system status and service health.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:640px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:600;font-size:14px">Management Portal</div>
+        <span style="font-family:var(--mono);font-size:11px;color:#22C87A;background:rgba(34,200,122,.12);border:1px solid rgba(34,200,122,.2);padding:3px 10px;border-radius:99px">● Operational</span>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:600;font-size:14px">Agent Check-in API</div>
+        <span style="font-family:var(--mono);font-size:11px;color:#22C87A;background:rgba(34,200,122,.12);border:1px solid rgba(34,200,122,.2);padding:3px 10px;border-radius:99px">● Operational</span>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:600;font-size:14px">Backup Report Ingestion</div>
+        <span style="font-family:var(--mono);font-size:11px;color:#22C87A;background:rgba(34,200,122,.12);border:1px solid rgba(34,200,122,.2);padding:3px 10px;border-radius:99px">● Operational</span>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:600;font-size:14px">Alert & Notification Delivery</div>
+        <span style="font-family:var(--mono);font-size:11px;color:#22C87A;background:rgba(34,200,122,.12);border:1px solid rgba(34,200,122,.2);padding:3px 10px;border-radius:99px">● Operational</span>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:600;font-size:14px">SSO / Authentication</div>
+        <span style="font-family:var(--mono);font-size:11px;color:#22C87A;background:rgba(34,200,122,.12);border:1px solid rgba(34,200,122,.2);padding:3px 10px;border-radius:99px">● Operational</span>
+      </div>
+    </div>
+    <div style="margin-top:20px;font-family:var(--mono);font-size:11px;color:var(--muted2)">Last checked: May 2026 · All systems normal</div>
+  </div>
+</section>
+
+<!-- INTEGRATIONS -->
+<section id="integrations" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container">
+    <div class="label">Integrations</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">INTEGRATIONS</h2>
+    <p class="section-sub" style="margin:14px 0 40px">RestoreGuard connects with the tools your team already uses.</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:900px">
+
+      <div id="int-jamf" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:26px;margin-bottom:14px">🔗</div>
+        <div style="font-weight:800;font-size:15px;margin-bottom:8px">Jamf Pro</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">Deploy the RestoreGuard PKG via Jamf policy, auto-register devices on enrollment via webhook, and sync backup health back to Jamf as Extension Attributes for Smart Group targeting.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="btag">PKG deployment</span><span class="btag">Webhooks</span><span class="btag">EA sync</span><span class="btag">Smart Groups</span></div>
+      </div>
+
+      <div id="int-slack" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:26px;margin-bottom:14px">💬</div>
+        <div style="font-weight:800;font-size:15px;margin-bottom:8px">Slack</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">Receive backup failure alerts, compliance summary digests, and restore notifications directly in your Slack channels. Configure per-channel routing per org.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="btag">Failure alerts</span><span class="btag">Weekly digest</span><span class="btag">Channel routing</span></div>
+      </div>
+
+      <div id="int-teams" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:26px;margin-bottom:14px">🟦</div>
+        <div style="font-weight:800;font-size:15px;margin-bottom:8px">Microsoft Teams</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">Post backup alerts and compliance reports to any Teams channel via webhook. Works alongside Entra ID SSO for a fully Microsoft-native workflow.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="btag">Webhook alerts</span><span class="btag">Compliance reports</span></div>
+      </div>
+
+      <div id="int-okta" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:26px;margin-bottom:14px">🔐</div>
+        <div style="font-weight:800;font-size:15px;margin-bottom:8px">Okta</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">Single sign-on for the RestoreGuard admin portal via Okta SAML 2.0 or OIDC. Provision and deprovision admin access automatically through Okta groups.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="btag">SAML 2.0</span><span class="btag">OIDC</span><span class="btag">Group provisioning</span></div>
+      </div>
+
+      <div id="int-entraid" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:26px;margin-bottom:14px">🏢</div>
+        <div style="font-weight:800;font-size:15px;margin-bottom:8px">Entra ID</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">Sign in to the RestoreGuard portal with Microsoft Entra ID (formerly Azure AD). Supports conditional access policies and integrates with your existing Microsoft 365 identity.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px"><span class="btag">Microsoft SSO</span><span class="btag">Conditional access</span><span class="btag">M365</span></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section id="about" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container" style="max-width:760px">
+    <div class="label">Company</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">ABOUT</h2>
+    <div style="font-size:16px;color:var(--muted);line-height:1.85;margin-top:20px;display:flex;flex-direction:column;gap:18px">
+      <p>RestoreGuard is built by <strong style="color:var(--ink)">CodeFuzion LLC</strong>, a company founded by IT administrators who got tired of explaining to leadership why a managed Mac fleet had no reliable backup story.</p>
+      <p>We've deployed Jamf at scale. We've been on the other end of a ransomware incident with no recovery path. RestoreGuard is the tool we wished existed — a backup and restore platform that speaks Jamf natively, stores data in your own infrastructure, and doesn't require a second MDM or a new cloud vendor to trust.</p>
+      <p>The platform is designed to be invisible to end users and indispensable to admins. Devices back up automatically, compliance surfaces in the portal, and restores happen in minutes — all without touching enrollment or breaking anything that Jamf manages.</p>
+      <div style="padding:20px 24px;background:rgba(0,212,170,.05);border:1px solid rgba(0,212,170,.15);border-radius:10px;font-size:14px;color:var(--muted)">
+        Questions, partnerships, or press enquiries: <a href="mailto:hello@codefuzion.io" style="color:var(--teal);font-weight:600">hello@codefuzion.io</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BLOG -->
+<section id="blog" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container">
+    <div class="label">Company</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">BLOG</h2>
+    <p class="section-sub" style="margin:14px 0 40px">Guides and perspectives for Jamf admins managing Mac fleet backup.</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:900px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="height:6px;background:linear-gradient(90deg,var(--teal),transparent)"></div>
+        <div style="padding:24px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--teal);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em">Guide</div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:8px;line-height:1.3">Why Jamf doesn't include backup — and how to fill the gap</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">MDM manages compliance and configuration. Backup is a separate concern. Here's how to build a complete data protection story around Jamf.</div>
+        </div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="height:6px;background:linear-gradient(90deg,var(--teal),transparent)"></div>
+        <div style="padding:24px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--teal);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em">Deep dive</div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:8px;line-height:1.3">Cloud vs external drive backup for managed Macs</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">When to use S3, Azure, or GCS versus an encrypted external drive for each Mac. Cost, recovery speed, and compliance tradeoffs compared.</div>
+        </div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .2s" onmouseover="this.style.borderColor='rgba(0,212,170,.3)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="height:6px;background:linear-gradient(90deg,var(--teal),transparent)"></div>
+        <div style="padding:24px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--teal);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em">Incident report</div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:8px;line-height:1.3">40 Macs restored in one day after ransomware</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">A real-world account of using selective restore and merge mode to recover a 40-device fleet without rebuilding a single Mac from scratch.</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:24px;font-size:13px;color:var(--muted2);font-family:var(--mono)">Blog posts coming soon — <a href="mailto:hello@codefuzion.io" style="color:var(--teal)">subscribe for updates</a></div>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section id="security" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container" style="max-width:760px">
+    <div class="label">Company</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">SECURITY</h2>
+    <div style="display:flex;flex-direction:column;gap:24px;margin-top:28px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px">
+        <div style="font-weight:800;font-size:15px;margin-bottom:10px;color:var(--teal)">Your data never touches our servers</div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.75">All backup data is transferred directly from the Mac to your chosen destination — an external drive, your S3 bucket, your Azure container, or your GCS bucket. RestoreGuard's management server handles metadata, scheduling, and reporting only. It never acts as a data relay.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px">
+        <div style="font-weight:800;font-size:15px;margin-bottom:10px">Agent communication</div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.75">All communication between the RestoreGuard agent and the management server uses HTTPS with TLS 1.2+. API keys are scoped per organisation and can be rotated from the portal at any time. JWT tokens are signed with per-deployment secrets and expire after 24 hours.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px">
+        <div style="font-weight:800;font-size:15px;margin-bottom:10px">Backup encryption</div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.75">External drive backups use APFS encryption with a key controlled by the device owner. Cloud backups use server-side encryption at the storage provider level (AES-256). Credentials for cloud destinations are stored encrypted and scoped to the minimum required permissions.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px">
+        <div style="font-weight:800;font-size:15px;margin-bottom:10px">Responsible disclosure</div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.75">If you discover a security vulnerability in RestoreGuard, please report it to <a href="mailto:security@codefuzion.io" style="color:var(--teal)">security@codefuzion.io</a>. We aim to acknowledge reports within 48 hours and resolve confirmed vulnerabilities within 30 days.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRIVACY -->
+<section id="privacy" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container" style="max-width:760px">
+    <div class="label">Company</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">PRIVACY</h2>
+    <div style="font-size:14px;color:var(--muted);line-height:1.85;margin-top:24px;display:flex;flex-direction:column;gap:20px">
+      <p><strong style="color:var(--ink)">What we collect.</strong> RestoreGuard collects device metadata (serial number, hardware UUID, last backup date, backup health status), admin account information (email address, organisation), and usage events (backup completions, restore initiations). We do not collect, process, or store any backup file content.</p>
+      <p><strong style="color:var(--ink)">What we don't collect.</strong> We never access, index, or transmit the contents of backed-up files. Your backup data goes directly to your storage destination. We have no technical access to it.</p>
+      <p><strong style="color:var(--ink)">How metadata is used.</strong> Device and backup metadata is used solely to operate the RestoreGuard portal — displaying compliance status, triggering alerts, and generating reports for your organisation. We do not sell metadata to third parties or use it for advertising.</p>
+      <p><strong style="color:var(--ink)">Data retention.</strong> Metadata is retained for as long as your account is active. You can delete a device's records from the portal at any time. On account cancellation, all metadata is deleted within 30 days.</p>
+      <p><strong style="color:var(--ink)">Contact.</strong> For privacy questions or data deletion requests: <a href="mailto:privacy@codefuzion.io" style="color:var(--teal)">privacy@codefuzion.io</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- TERMS -->
+<section id="terms" style="padding:80px 0;border-top:1px solid var(--border)">
+  <div class="container" style="max-width:760px">
+    <div class="label">Company</div>
+    <h2 class="section-h2" style="font-size:clamp(36px,4vw,56px);margin-top:10px">TERMS</h2>
+    <div style="font-size:14px;color:var(--muted);line-height:1.85;margin-top:24px;display:flex;flex-direction:column;gap:20px">
+      <p><strong style="color:var(--ink)">Service.</strong> RestoreGuard is provided by CodeFuzion LLC. By using the service you agree to these terms. The service includes the RestoreGuard management portal, the agent software deployed to your Macs, and any API access provided under your subscription.</p>
+      <p><strong style="color:var(--ink)">Your data.</strong> You own all backup data and device metadata associated with your account. CodeFuzion LLC claims no rights to your data. You are responsible for ensuring you have the right to back up the data on the devices in your fleet.</p>
+      <p><strong style="color:var(--ink)">Subscriptions.</strong> Plans are billed monthly or annually per device. You may cancel at any time. Cancellation takes effect at the end of the current billing period. No refunds are issued for partial periods.</p>
+      <p><strong style="color:var(--ink)">Acceptable use.</strong> RestoreGuard may only be used on devices your organisation manages and has authority over. The service may not be used to back up or restore devices belonging to individuals or organisations without their consent.</p>
+      <p><strong style="color:var(--ink)">Liability.</strong> RestoreGuard is a tool that facilitates backup and restore. CodeFuzion LLC is not liable for data loss resulting from hardware failure, user error, network issues, or storage provider outages. Always maintain independent verification of backup integrity using the built-in verification tools.</p>
+      <p><strong style="color:var(--ink)">Contact.</strong> Legal enquiries: <a href="mailto:legal@codefuzion.io" style="color:var(--teal)">legal@codefuzion.io</a></p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-brand-logo">
+          <div class="app-icon">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L4 5.5V11C4 15.55 7.41 19.74 12 21C16.59 19.74 20 15.55 20 11V5.5L12 2Z" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"/>
+              <path d="M9 12L11 14L15 10" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          RestoreGuard
+        </div>
+        <p>Enterprise-grade backup and restore for Jamf-enrolled Mac fleets. Built by admins, for admins.</p>
+      </div>
+      <div class="footer-col">
+        <h5>Product</h5>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#changelog">Changelog</a></li>
+          <li><a href="#documentation">Documentation</a></li>
+          <li><a href="#status">Status</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Integrations</h5>
+        <ul>
+          <li><a href="#int-jamf">Jamf Pro</a></li>
+          <li><a href="#int-slack">Slack</a></li>
+          <li><a href="#int-teams">Microsoft Teams</a></li>
+          <li><a href="#int-okta">Okta</a></li>
+          <li><a href="#int-entraid">Entra ID</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Company</h5>
+        <ul>
+          <li><a href="#about">About</a></li>
+          <li><a href="#blog">Blog</a></li>
+          <li><a href="#security">Security</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+          <li><a href="#terms">Terms</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 CodeFuzion LLC. All rights reserved.</span>
+      <span>v1.5.0 · macOS 13 Ventura+ · Apple Silicon & Intel</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Billing
+let bill = 'm';
+function setBill(t) {
+  bill = t;
+  document.getElementById('bm').classList.toggle('active', t==='m');
+  document.getElementById('ba').classList.toggle('active', t==='a');
+  document.querySelectorAll('.plan-price-n[data-m]').forEach(el => {
+    el.textContent = '$' + (t==='a' ? el.dataset.a : el.dataset.m);
+  });
+}
+
+// FAQ
+function toggleFaq(el) {
+  const item = el.parentElement;
+  const wasOpen = item.classList.contains('open');
+  document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+  if (!wasOpen) item.classList.add('open');
+}
+
+// Steps
+let step = 1;
+function setStep(n) {
+  step = n;
+  document.querySelectorAll('.step-item').forEach((s,i) => s.classList.toggle('active', i+1===n));
+}
+setInterval(() => setStep((step % 4) + 1), 3000);
+
+// Scroll reveal
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>
